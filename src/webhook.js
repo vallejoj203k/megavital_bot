@@ -1,12 +1,13 @@
 /**
  * webhook.js
- * Controlador Express para el webhook de WhatsApp (360dialog).
+ * Controlador Express para el webhook de WhatsApp (Meta Cloud API).
  *
- * GET  /webhook → Verificación del webhook (token challenge).
- * POST /webhook → Recepción de mensajes entrantes.
+ * GET  /webhook → Verificación del webhook (hub.mode + hub.verify_token + hub.challenge).
+ * POST /webhook → Recepción de mensajes entrantes y actualizaciones de estado.
  *
  * IMPORTANTE: Responde HTTP 200 INMEDIATAMENTE al POST y luego procesa en background.
- * Esto evita que 360dialog reintente el webhook si el procesamiento tarda.
+ * Meta reintenta el webhook si no recibe 200 en menos de 20 segundos.
+ * Los webhooks de estado (delivered, read) se descartan silenciosamente en extraerMensaje().
  */
 
 import { extraerMensaje, enviarRespuestaBot } from "./whatsapp.js";
