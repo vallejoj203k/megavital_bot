@@ -1,15 +1,14 @@
 /**
  * whatsapp.js
- * Servicio para enviar mensajes a través de la API de 360dialog (WhatsApp Business API).
+ * Servicio para enviar mensajes a través de Meta Cloud API (WhatsApp Business API).
  * Gestiona el envío de respuestas del bot y mensajes de escalación al humano.
  */
 
 import axios from "axios";
 import { INFO_GIMNASIO } from "./gimnasio.js";
 
-const WHATSAPP_API_URL =
-  process.env.WHATSAPP_API_URL || "https://waba.360dialog.io/v1/messages";
-const WHATSAPP_API_KEY = process.env.WHATSAPP_API_KEY || "";
+const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN || "";
+const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || "";
 
 /**
  * Envía un mensaje de texto simple a un número de WhatsApp.
@@ -19,29 +18,29 @@ const WHATSAPP_API_KEY = process.env.WHATSAPP_API_KEY || "";
  * @returns {Promise<boolean>} true si se envió correctamente, false en caso de error.
  */
 export async function enviarMensaje(telefono, texto) {
-  if (!WHATSAPP_API_KEY) {
+  if (!WHATSAPP_TOKEN || !PHONE_NUMBER_ID) {
     console.warn(
-      "[whatsapp.js] WHATSAPP_API_KEY no configurada. Mensaje no enviado."
+      "[whatsapp.js] WHATSAPP_TOKEN o WHATSAPP_PHONE_NUMBER_ID no configurados. Mensaje no enviado."
     );
     console.log(`[whatsapp.js] Mensaje simulado → ${telefono}: ${texto}`);
     return false;
   }
 
+  const url = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`;
+
   try {
     const payload = {
       messaging_product: "whatsapp",
-      recipient_type: "individual",
       to: telefono,
       type: "text",
       text: {
-        preview_url: false,
         body: texto,
       },
     };
 
-    const response = await axios.post(WHATSAPP_API_URL, payload, {
+    const response = await axios.post(url, payload, {
       headers: {
-        "D360-API-KEY": WHATSAPP_API_KEY,
+        Authorization: `Bearer ${WHATSAPP_TOKEN}`,
         "Content-Type": "application/json",
       },
       timeout: 10000,
@@ -112,17 +111,28 @@ export async function enviarRespuestaBot(telefono, respuesta, escalarHumano) {
 }
 
 /**
- * Extrae el número de teléfono y el texto del mensaje entrante del payload de 360dialog.
+ * Extrae el número de teléfono y el texto del mensaje entrante del payload de Meta Cloud API.
+ * Ignora silenciosamente los webhooks de estado (delivered, read, sent) donde
+ * entry[0].changes[0].value.messages no existe.
  *
  * @param {object} body - Cuerpo del webhook recibido.
  * @returns {{ telefono: string|null, mensaje: string|null }} Datos extraídos del mensaje.
  */
 export function extraerMensaje(body) {
   try {
-    const entry = body?.entry?.[0];
-    const changes = entry?.changes?.[0];
-    const value = changes?.value;
-    const mensajeObj = value?.messages?.[0];
+    // Verificar que sea un evento de WhatsApp Business
+    if (body?.object !== "whatsapp_business_account") {
+      return { telefono: null, mensaje: null };
+    }
+
+    const value = body?.entry?.[0]?.changes?.[0]?.value;
+
+    // Ignorar webhooks de estado (delivered, read, sent) — no tienen messages
+    if (!value?.messages) {
+      return { telefono: null, mensaje: null };
+    }
+
+    const mensajeObj = value.messages[0];
 
     if (!mensajeObj) {
       return { telefono: null, mensaje: null };

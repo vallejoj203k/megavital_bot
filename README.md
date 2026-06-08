@@ -5,7 +5,7 @@ Bot de atención al cliente por WhatsApp impulsado por IA (Claude de Anthropic) 
 ## ✨ Características
 
 - 🤖 Respuestas inteligentes usando **Claude Opus 4.7** (Anthropic)
-- 💬 Integración con **WhatsApp Business API** a través de 360dialog
+- 💬 Integración con **WhatsApp Business API** directa vía Meta Cloud API
 - 🧠 **Memoria de conversación** por número (historial de 24 horas, máximo 20 mensajes)
 - 🕐 **Conciencia horaria en tiempo real** (zona horaria Colombia / America/Bogota)
 - 📋 Información completa de horarios, clases y planes de precios
@@ -22,7 +22,7 @@ Bot de atención al cliente por WhatsApp impulsado por IA (Claude de Anthropic) 
 - Node.js ≥ 18.0.0
 - Cuenta en [Anthropic](https://console.anthropic.com) (API Key)
 - Cuenta en [Supabase](https://supabase.com) (URL + Service Key)
-- Cuenta en [360dialog](https://www.360dialog.com) (WhatsApp Business API Key)
+- Cuenta en [Meta for Developers](https://developers.facebook.com) con app de tipo Business y WhatsApp habilitado
 
 ### 1. Clonar el repositorio
 
@@ -52,10 +52,10 @@ NODE_ENV=production
 # Anthropic / Claude API
 ANTHROPIC_API_KEY=sk-ant-...
 
-# WhatsApp Business API (360dialog)
-WHATSAPP_API_KEY=tu_api_key_de_360dialog
-WHATSAPP_API_URL=https://waba.360dialog.io/v1/messages
-WHATSAPP_PHONE_NUMBER_ID=tu_phone_number_id
+# WhatsApp Business (Meta Cloud API)
+WHATSAPP_TOKEN=EAAxxxxxxx
+WHATSAPP_PHONE_NUMBER_ID=xxxxxxxxx
+WHATSAPP_BUSINESS_ACCOUNT_ID=xxxxx
 WEBHOOK_VERIFY_TOKEN=tu_token_secreto_para_verificacion
 
 # Supabase
@@ -90,14 +90,43 @@ El servidor estará disponible en `http://localhost:3000`.
 
 ---
 
-## 📡 Configuración del Webhook en 360dialog
+## 📡 Configuración de WhatsApp con Meta Cloud API
 
-1. En tu panel de 360dialog, configura la URL del webhook:
-   ```
-   https://tu-dominio.com/webhook
-   ```
-2. Usa el mismo valor de `WEBHOOK_VERIFY_TOKEN` del `.env`.
-3. 360dialog enviará un GET de verificación, que el bot responderá automáticamente.
+### Paso 1 — Crear la app en Meta for Developers
+
+1. Ve a [developers.facebook.com](https://developers.facebook.com) e inicia sesión.
+2. Clic en **"Mis apps" → "Crear app"**.
+3. Selecciona tipo **"Business"** y completa el nombre (ej: `megavital-bot`).
+4. En el panel de la app, busca el producto **"WhatsApp"** y clic en **"Configurar"**.
+
+### Paso 2 — Obtener Phone Number ID y Business Account ID
+
+1. En el menú izquierdo → **WhatsApp → Configuración de la API**.
+2. En la sección **"Enviar y recibir mensajes"** encontrarás:
+   - **ID de número de teléfono** → `WHATSAPP_PHONE_NUMBER_ID`
+   - **ID de cuenta de WhatsApp Business** → `WHATSAPP_BUSINESS_ACCOUNT_ID`
+
+### Paso 3 — Generar token de acceso permanente (System User)
+
+> El token temporal de prueba expira en 24 horas. Para producción usa un System User:
+
+1. Ve a [business.facebook.com](https://business.facebook.com) → **Configuración del negocio**.
+2. En **"Usuarios" → "Usuarios del sistema"** → **"Agregar"**.
+3. Crea un usuario con rol **Administrador**.
+4. Clic en **"Generar nuevo token"** → selecciona tu app → activa el permiso **`whatsapp_business_messaging`**.
+5. Copia el token → `WHATSAPP_TOKEN=EAAxxxxxxx`
+
+### Paso 4 — Configurar el webhook
+
+1. En tu app → **WhatsApp → Configuración → Webhooks**.
+2. Clic en **"Editar"** e ingresa:
+   - **URL de devolución de llamada:**
+     ```
+     https://tu-app.up.railway.app/webhook
+     ```
+   - **Token de verificación:** el valor de `WEBHOOK_VERIFY_TOKEN` en tu `.env`
+3. Clic en **"Verificar y guardar"** → Meta hará un GET automático y el bot responderá con el challenge ✅.
+4. En la sección **"Campos de webhook"** → activa el campo **`messages`** → clic en **"Suscribirse"**.
 
 ---
 
@@ -126,8 +155,9 @@ docker run -d \
 
 **Variables de entorno requeridas en Railway:**
 - `ANTHROPIC_API_KEY`
-- `WHATSAPP_API_KEY`
-- `WHATSAPP_API_URL`
+- `WHATSAPP_TOKEN`
+- `WHATSAPP_PHONE_NUMBER_ID`
+- `WHATSAPP_BUSINESS_ACCOUNT_ID`
 - `WEBHOOK_VERIFY_TOKEN`
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_KEY`
@@ -155,7 +185,7 @@ megavital_bot/
 │   ├── webhook.js     # Controlador del webhook (GET verificación + POST mensajes)
 │   ├── claude.js      # Servicio de IA (Anthropic SDK)
 │   ├── memoria.js     # Gestión del historial en Supabase
-│   ├── whatsapp.js    # Envío de mensajes via 360dialog
+│   ├── whatsapp.js    # Envío de mensajes via Meta Cloud API
 │   └── gimnasio.js    # Datos del gimnasio y system prompt dinámico
 ├── supabase/
 │   └── schema.sql     # Esquema de base de datos
@@ -176,7 +206,7 @@ Cliente WhatsApp
       ▼ POST /webhook
 Express (index.js)
       │
-      ├─► HTTP 200 OK (inmediato, evita reintentos de 360dialog)
+      ├─► HTTP 200 OK (inmediato, evita reintentos de Meta)
       │
       └─► [Background] webhook.js
                │
@@ -185,7 +215,7 @@ Express (index.js)
                ├── Obtiene historial (memoria.js → Supabase)
                ├── Genera respuesta (claude.js → Anthropic API)
                ├── Guarda mensajes (memoria.js → Supabase)
-               └── Envía respuesta (whatsapp.js → 360dialog)
+               └── Envía respuesta (whatsapp.js → Meta Cloud API)
                         │
                         ├── Si [ESCALAR_HUMANO]: mensaje al cliente + notificación al asesor
                         └── Respuesta llega al cliente WhatsApp
@@ -222,9 +252,9 @@ curl http://localhost:3000/health
 | `PORT` | Puerto del servidor (default: 3000) | No |
 | `NODE_ENV` | Entorno (`development`/`production`) | No |
 | `ANTHROPIC_API_KEY` | API Key de Anthropic | **Sí** |
-| `WHATSAPP_API_KEY` | API Key de 360dialog | **Sí** |
-| `WHATSAPP_API_URL` | URL de la API de mensajes de 360dialog | **Sí** |
-| `WHATSAPP_PHONE_NUMBER_ID` | ID del número de teléfono en 360dialog | **Sí** |
+| `WHATSAPP_TOKEN` | Token permanente de Meta for Developers (System User) | **Sí** |
+| `WHATSAPP_PHONE_NUMBER_ID` | ID del número de teléfono en Meta | **Sí** |
+| `WHATSAPP_BUSINESS_ACCOUNT_ID` | ID de la cuenta WhatsApp Business en Meta | **Sí** |
 | `WEBHOOK_VERIFY_TOKEN` | Token secreto para verificación del webhook | **Sí** |
 | `SUPABASE_URL` | URL del proyecto Supabase | **Sí** |
 | `SUPABASE_SERVICE_KEY` | Service Key de Supabase | **Sí** |
