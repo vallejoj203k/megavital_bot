@@ -26,7 +26,7 @@ export async function enviarMensaje(telefono, texto) {
     return false;
   }
 
-  const url = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`;
+  const url = `https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`;
 
   try {
     const payload = {
