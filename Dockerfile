@@ -3,7 +3,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Imagen base: Node.js LTS sobre Alpine (imagen ligera)
-FROM node:20-alpine
+FROM node:22-alpine
 
 # Metadatos
 LABEL maintainer="Gimnasio MEGA VITAL" \
